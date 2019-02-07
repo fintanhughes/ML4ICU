@@ -6,16 +6,9 @@ pd.options.display.max_columns=400
 
 data=pd.read_pickle("/home/fintan/tensorflow/chartdeltadone.pkl")
 
-#data
-#pt1=data[data.encounterid==10000]
-#pt1
-#data=df.drop(columns='charttime')
-
+#the variables I'm using to calculate the target
 sofafs = ['pfr', 'peep', 'tv', 'peakp', 'cr','dialysis', 'uo', 'bil','plt','map_a', 'map_c', 'norad', 'adr', 'dbut']
-
 sofa=data[data['interventionID'].isin(sofafs)]
-
-
 
 losofs = ['pfr','plt','map_a', 'map_c']
 hisofs = ['peep', 'tv', 'peakp', 'cr','dialysis', 'uo', 'bil', 'norad', 'adr', 'dbut']
@@ -24,14 +17,11 @@ loso = data[data['interventionID'].isin(losofs)]
 hiso = data[data['interventionID'].isin(hisofs)]
 
 loso['valueNum'] = loso.apply(lambda x: -x['valueNumber'], axis=1, reduce=True)
-
 loso=loso.drop(columns='valueNumber')
 
 loso.rename(columns={'valueNum': 'valueNumber'}, inplace=True)
-loso.head()
 
 sofam = pd.concat([loso,hiso])
-sofam.head()
 
 sofamax=sofam.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelta', freq='12H'))]).agg({'valueNumber':["max"]})
 #sofa_binnedlast
@@ -39,9 +29,6 @@ sofamax=sofam.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelt
 dfusk = sofamax.unstack('interventionID')
 
 dfusk_l1 = dfusk.xs('valueNumber', axis=1, drop_level=True)
-
-dfusk_l1.head()
-
 dfusk_l2 = dfusk_l1.xs('max', axis=1, drop_level=True)
 
 dfusk_l2.columns.get_level_values(0).astype(str)
