@@ -1,137 +1,26 @@
 import pandas as pd
 import numpy as np
 
-pd.options.display.max_rows=400
-pd.options.display.max_columns=400
-
-dfLact = []
-for l in range(1,20):
-    dfLact.append(pd.read_pickle("/home/fintan/tensorflow/takelact%d.pkl" % l))
-
-dfs = []
-for l in 'abcdefghijkx':
-    dfs.append(pd.read_pickle("/home/fintan/tensorflow/take2%s.pkl" % l))
-
-
-dfmr = pd.read_pickle('/home/fintan/tensorflow/takemore.pkl')
-
-dfmr.columns = dfmr.columns.str.replace('terseform','valueNumber')
-dfmr
-
-df = pd.concat(dfs)
-dfl = pd.concat(dfLact)
-
-dfl=dfl.drop(columns='attributeID')
-dfl
-
-frames = [df,dfl,dfmr]
-dfc = pd.concat(frames)
-dfc
-
-txmap = {
-    'dbut': 1441,
-    'adr': 2500,
-    'bil': (804, 226, 2057, 2072, 26454, 38619),
-    'cr': (1464, 26464),
-    'uo': (163),
-    'plt': (796, 1618, 2179, 35298),
-    'pfr': (834, 2242, 37637, 38323),
-    'norad': 131,
-    'hr': 686,
-    'temp': 1384,
-    'rr': 756,
-    'spo2': 684,
-    'fio2': 727,
-    'norad': 131,
-    'peakp': 750,
-    'tv': 692,
-    'cvp': 455,
-    'balpmp': 1184,
-    'lact': (1881, 26492),
-    'dialysis': (1358, 1346),
-    'aptt': (1310, 35295),
-    'na': (1302, 26471),
-    'ph': (1455, 26449),
-    'k': (1620, 26469),
-    'cl': (1471, 26451),
-    'ca': (1520, 26444),
-    'wcc': (1559, 35292),
-    'ur': (1655, 26473),
-    'hb': (1594, 14663, 35329),
-    'peep': (705),
-    'lympho': (2065, 2052, 35309, 35305),
-    'mono': (2066, 2056, 35311, 35333),
-    'neut': (2061, 2067, 35301, 35316),
-    'map_a': (1196),
-    'map_c': (858),
-    'vent' : (1928),
-    'rhythm' : (1175),
-}
-
-for newvalue, oldvalues in txmap.items():
-    dfc.interventionID=dfc.interventionID.replace(to_replace=oldvalues, value=newvalue)
-
-dfc.interventionID = dfc.interventionID.astype('category')
-
-dfmult=dfc.set_index('encounterid')
-
-chartstart = {}
-for e in dfc.encounterid.unique():
-    chartstart[e] = dfc[dfc.encounterid == e].charttime.min()
-
-dfc['chartdelta'] = dfc.apply(lambda x: x['charttime'] - chartstart[x['encounterid']], axis=1, reduce=True)
-
-dfc
-
-######### Just start from here in future
-
 data=pd.read_pickle("/home/fintan/tensorflow/chartdeltadone.pkl")
 
-data.head()
-
-#DFForAnais
-
-minidf=data.loc[data['encounterid'] <= 100]
-
-minidf.to_pickle('/home/fintan/tensorflow/minidf.pkl')
-
+#removing non numeric features for now
 dflessrhythm = data[data.interventionID != 'rhythm']
 dflessvent = dflessrhythm[dflessrhythm.interventionID != 'vent']
 data = dflessvent
 
-
-
-pt1=data[data.encounterid==1]
-#data.loc[data['interventionID']=='peakp']
-#dfc[dfc.encounterid==1]
-#data[data['interventionID'].isin(['lact'])]
-pt1
-
+#Put into time bins
 #data_binnedlast=data.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelta', freq='8H'))]).agg({'valueNumber':['min', 'max']})
 data_binnedlast=data.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelta', freq='8H'))]).agg({'valueNumber':['last']})
 
+#unstacking to give unique column for each feature
 dfusk = data_binnedlast.unstack('interventionID')
 
-
-dfusk.head()
-
-
-
-
-#dfusk
-#dfusk['LOS'] = 0
-#paddedSorted['marrow'][paddedSorted['plt'].notna() & (abs(paddedSorted['plt']) < 150)] = 1
-
+#cleans up the indexes
 dfusk_l1 = dfusk.xs('valueNumber', axis=1, drop_level=True)
-#dfusk.swaplevel('interventionID', '')
-
 dfusk_l2 = dfusk_l1.xs('last', axis=1, drop_level=True)
 dfusk_l2.columns.get_level_values(0).astype(str)
 dfusk_flat = dfusk_l2.copy()
 dfusk_flat.columns = dfusk_flat.columns.astype(str)
-dfusk_flat.head()
-
-#paddedSorted['FiCOF'] = 0
 
 ### THIS calculates length of stay and inputs into a new column
 for e in dfusk_flat.index.levels[0].unique():
@@ -141,9 +30,17 @@ for e in dfusk_flat.index.levels[0].unique():
 #dfld = dfusk.swaplevel(i=-2, j=-1, axis=1)
 #dfld.head()
 
+
+#attemps at rolling expanding means.. they dont iterate across individual patients
 for i in dfusk_flat.index.levels[0].unique():
      dfusk_flat.loc[i,'exphrmx'] = dfusk_flat['temp'].loc[i].expanding().mean()
 #this isnt iterating properly at all.. just giving all NaNs
+
+#works for individual patients
+#dfusk_ls['hr'].expanding().max()
+dfusk_ls['hr'].loc[2].expanding().mean()
+dfusk_ls['hr'].rolling(2).max()
+
 
 for i in dfusk_flat.index.levels[0].unique():
      dfusk_flat.loc[i,'exp'] = dfusk_flat['temp'].loc[i].rolling(2).max()
@@ -151,49 +48,24 @@ for i in dfusk_flat.index.levels[0].unique():
 
 dfusk_flat['temp'].loc[3].expanding().mean()
 
-dfusk_flat
-
-i
-dfusk_flat['temp'].loc[1].expanding(0).min()
-
-dfusk_flat
 
 ## takes only those with a LOS >= 2 days
-
 tee = pd.to_timedelta('2 days 00:00:00.00000')
-
 dfusk_ls = dfusk_flat[dfusk_flat["los"] >= tee]
 
-dfusk_ls.head()
 
-dfusk_ls['hr'].head()
-
-
-
-#dfusk_ls['hr'].expanding().max()
-dfusk_ls['hr'].loc[2].expanding().mean()
-
-dfusk_ls['hr'].rolling(2).max()
 
 #Make 24hr batches? - this isnt the way
-
 daybatch=dfusk_ls.groupby(pd.Grouper(level='chartdelta', freq='24H'))
 
-daybatch.head()
 
-Now it's time to bring in Mortality - He Deaad
-
+#Now it's time to bring in Mortality - He Deaad
 izded=pd.read_pickle("/home/fintan/tensorflow/aretheydead.pkl")
-
 ded=pd.read_pickle("/home/fintan/tensorflow/dead.pkl")
-
 dfded = pd.concat(dfLact)
 
 izded
 mortyn = izded.sort_values(['encounterId'], ascending = [True])
-
-#paddedSorted['ventilated'] = 0
-#paddedSorted['ventilated'][paddedSorted['tv'].notna() & paddedSorted['peep'].notna()]  = 1
 
 mortyn['dead'] = 0
 mortyn['dead'][(mortyn['dischargeDisposition'] == 'Deceased') | (mortyn['isDeceased'] == True)] = 1
