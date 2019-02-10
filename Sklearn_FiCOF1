@@ -11,10 +11,12 @@ from tensorflow.python.keras.layers import Input, Dense, GRU, Embedding
 from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
 
+#importing data from feat engineering & FiCOFs
 feat = pd.read_pickle("/home/fintan/tensorflow/features/simps.pkl")
 FiCOFs=pd.read_pickle('/home/fintan/tensorflow/targets/FICOFs.pkl')
 df=pd.concat([feat, FiCOFs], axis=1, join_axes=[feat.index])
 
+#a feature scaler
 def feature_scaling(scaler=False, X=False):
    from sklearn import preprocessing
    if scaler is not False:
@@ -27,7 +29,8 @@ def feature_scaling(scaler=False, X=False):
 def interaction_terms(X=False, order=2):
     from sklearn import preprocessing
     return preprocessing.PolynomialFeatures(order).fit_transform(X)
-    
+
+#really basic imputer
 def impute(imputer=False, X=False):
    from sklearn.preprocessing import Imputer
    if imputer is not False:
@@ -40,20 +43,21 @@ def impute(imputer=False, X=False):
    
 df=df.reset_index(level=['encounterid','chartdelta'])
 
-
+# This shifts the target by a day then brings it back into the df
 df_c = df.copy()
 df_c['chartdelta'] = df.chartdelta - pd.Timedelta(days=1)
 df_c['target'] = df_c['FiCOF']
 df = df.merge(df_c[['encounterid', 'chartdelta', 'target']], on=['encounterid', 'chartdelta'], how='left')
 
-
+# This shifts features by a day, to give a really shoddy first move towards looking at trends
 df_c = df.copy()
 df_c['chartdelta'] = df.chartdelta + pd.Timedelta(days=1)
 df_c.rename({'hr': 'hr_1', 'map_a':'map_a_1', 'map_c': 'map_c_1', 'temp':'temp_1', 'rr':'rr_1', 'lact':'lact_1','wcc':'wcc_1', 'ph':'ph_1', 'cr':'cr_1', 'pfr':'pfr_1', 'FiCOF':'FiCOF_1'}, axis=1, inplace=True)
 df = df.merge(df_c[['encounterid','chartdelta','hr_1','map_a_1','map_c_1','temp_1','lact_1','wcc_1','ph_1','cr_1','pfr_1', 'FiCOF_1']], on=['encounterid', 'chartdelta'], how='left')
 df.head()
 
-
+# I dream of replacing this with a proper time series; for now I'm just making deltas from the previous day
+# The trend of the features is arguably as important as their actual values
 df['ph_del']=df['ph']-df['ph_1']
 df['lact_del']=df['lact']-df['lact_1']
 df['cr_del']=df['cr']-df['cr_1']
