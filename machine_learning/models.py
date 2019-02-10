@@ -1,0 +1,153 @@
+%matplotlib inline
+import matplotlib.pyplot as plt
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import os
+from sklearn.preprocessing import MinMaxScaler
+
+from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.layers import Input, Dense, GRU, Embedding
+from tensorflow.python.keras.optimizers import RMSprop
+from tensorflow.python.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard, ReduceLROnPlateau
+
+#importing data from feat engineering & FiCOFs
+feat = pd.read_pickle("/home/fintan/tensorflow/features/simps.pkl")
+FiCOFs=pd.read_pickle('/home/fintan/tensorflow/targets/FICOFs.pkl')
+df=pd.concat([feat, FiCOFs], axis=1, join_axes=[feat.index])
+
+#a feature scaler
+def feature_scaling(scaler=False, X=False):
+   from sklearn import preprocessing
+   if scaler is not False:
+       return pd.DataFrame(scaler.transform(X), columns=X.columns)
+   if scaler is False:
+       scaler = preprocessing.StandardScaler()
+       scaler_fitted = scaler.fit(X)
+   return pd.DataFrame(scaler_fitted.transform(X), columns=X.columns), scaler_fitted
+   
+def interaction_terms(X=False, order=2):
+    from sklearn import preprocessing
+    return preprocessing.PolynomialFeatures(order).fit_transform(X)
+
+#really basic imputer
+def impute(imputer=False, X=False):
+   from sklearn.preprocessing import Imputer
+   if imputer is not False:
+       return pd.DataFrame(imputer.transform(X), columns=X.columns)
+   if imputer is False:
+       imp = Imputer(missing_values='NaN', strategy='mean', axis=0)
+       imp_fitted = imp.fit(X)
+   return pd.DataFrame(imp_fitted.transform(X), columns=X.columns), imp_fitted
+   
+   
+df=df.reset_index(level=['encounterid','chartdelta'])
+
+# This shifts the target by a day then brings it back into the df
+df_c = df.copy()
+df_c['chartdelta'] = df.chartdelta - pd.Timedelta(days=1)
+df_c['target'] = df_c['FiCOF']
+df = df.merge(df_c[['encounterid', 'chartdelta', 'target']], on=['encounterid', 'chartdelta'], how='left')
+
+# This shifts features by a day, to give a really shoddy first move towards looking at trends
+df_c = df.copy()
+df_c['chartdelta'] = df.chartdelta + pd.Timedelta(days=1)
+df_c.rename({'hr': 'hr_1', 'map_a':'map_a_1', 'map_c': 'map_c_1', 'temp':'temp_1', 'rr':'rr_1', 'lact':'lact_1','wcc':'wcc_1', 'ph':'ph_1', 'cr':'cr_1', 'pfr':'pfr_1', 'FiCOF':'FiCOF_1'}, axis=1, inplace=True)
+df = df.merge(df_c[['encounterid','chartdelta','hr_1','map_a_1','map_c_1','temp_1','lact_1','wcc_1','ph_1','cr_1','pfr_1', 'FiCOF_1']], on=['encounterid', 'chartdelta'], how='left')
+df.head()
+
+# I dream of replacing this with a proper time series; for now I'm just making deltas from the previous day
+# The trend of the features is arguably as important as their actual values
+df['ph_del']=df['ph']-df['ph_1']
+df['lact_del']=df['lact']-df['lact_1']
+df['cr_del']=df['cr']-df['cr_1']
+df['hr_del']=df['hr']-df['hr_1']
+df['wcc_del']=df['wcc']-df['wcc_1']
+#df['target2'] = (df['target'] - df['FiCOF']) / df['FiCOF']
+df.head()
+
+
+ex_cols = ['encounterid', 'chartdelta']
+cols_list = [col for col in df.columns if col not in ex_cols]
+df = df[cols_list]
+
+
+#impute
+df_imp, imputer = impute(X=df)
+df_imp = pd.DataFrame(df_imp, columns=df.columns)
+
+#feature scaler
+df_imp, scaler = feature_scaling(scaler=False, X=df_imp)
+
+
+#Splitting X , Y
+tar = 'target'
+x = df_imp.loc[:, df_imp.columns != tar]
+y = df_imp[tar]
+
+from sklearn.model_selection import train_test_split
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.33, random_state=42)
+
+# Make interactionterms
+x_train_int = interaction_terms(x_train, 1)
+x_test_int = interaction_terms(x_test, 1)
+
+# sample and hold
+from sklearn.metrics import mean_absolute_error
+y_pred = x_test['cr']
+print(mean_absolute_error(y_test, y_pred))
+from sklearn.metrics import r2_score
+print(r2_score(y_test, y_pred))
+from sklearn.metrics import median_absolute_error
+print(median_absolute_error(y_test, y_pred))
+
+# Linear regression model
+from sklearn.linear_model import LinearRegression
+clf = LinearRegression(normalize=False)
+model = clf.fit(x_train_int, y_train)
+y_pred = model.predict(x_test_int)
+
+# Evaluate Linear regression model
+from sklearn.metrics import mean_absolute_error
+print(mean_absolute_error(y_test, y_pred))
+from sklearn.metrics import r2_score
+print(r2_score(y_test, y_pred))
+from sklearn.metrics import median_absolute_error
+print(median_absolute_error(y_test, y_pred))
+
+
+from sklearn.model_selection import cross_val_score
+# Gradient Boosting Regression model
+from sklearn import ensemble
+params = {'n_estimators': 50, 'max_depth': 4, 'min_samples_split': 2,
+          'learning_rate': 0.01, 'loss': 'ls'}
+clf = ensemble.GradientBoostingRegressor(**params)
+model = clf.fit(x_train_int, y_train)
+y_pred = model.predict(x_test_int)
+
+# Evaluate Gradient Boosting Regression model
+from sklearn.metrics import mean_absolute_error
+print(mean_absolute_error(y_test, y_pred))
+from sklearn.metrics import r2_score
+print(r2_score(y_test, y_pred))
+from sklearn.metrics import median_absolute_error
+print(median_absolute_error(y_test, y_pred))
+
+
+# Random forest Regression model
+from sklearn.ensemble import RandomForestRegressor
+clf = RandomForestRegressor(random_state=0, n_estimators=100)
+model = clf.fit(x_train_int, y_train)
+y_pred = model.predict(x_test_int)
+
+# Evaluate Random forest model
+from sklearn.metrics import mean_absolute_error
+print(mean_absolute_error(y_test, y_pred))
+from sklearn.metrics import r2_score
+print(r2_score(y_test, y_pred))
+from sklearn.metrics import median_absolute_error
+print(median_absolute_error(y_test, y_pred))
+
+# feature importance
+# sorted by importance
+sorted(zip(map(lambda x: round(x, 4), clf.feature_importances_), x.columns), reverse=True)
