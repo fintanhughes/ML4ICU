@@ -48,11 +48,11 @@ for i in dfusk_flat.index.levels[0].unique():
      dfusk_flat.loc[i,'exp'] = dfusk_flat['temp'].loc[i].rolling(2).max()
 #same problem with rolling
 
-So to make a standard length sequence to give an LSTM I'd like 24/48hr batches of features
-    ideally numbered under a new numbered index
+# So to make a standard length sequence to give an LSTM I'd like 24/48hr batches of features
+#     ideally numbered under a new numbered index
 
 #Make 24hr batches? - this isnt the way
 
-daybatch=dfusk_ls.groupby(pd.Grouper(level='chartdelta', freq='24H'))
+daybatch = dfusk_ls.groupby(pd.Grouper(level='chartdelta', freq='24H'))
 
 daybatch.head()
