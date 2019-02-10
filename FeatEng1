@@ -30,6 +30,7 @@ for e in dfusk_flat.index.levels[0].unique():
 #dfld = dfusk.swaplevel(i=-2, j=-1, axis=1)
 #dfld.head()
 
+#[[[[[[ THIS SECTION IS NOT WORKING YET
 
 #attemps at rolling expanding means.. they dont iterate across individual patients
 for i in dfusk_flat.index.levels[0].unique():
@@ -41,36 +42,31 @@ for i in dfusk_flat.index.levels[0].unique():
 dfusk_ls['hr'].loc[2].expanding().mean()
 dfusk_ls['hr'].rolling(2).max()
 
-
 for i in dfusk_flat.index.levels[0].unique():
      dfusk_flat.loc[i,'exp'] = dfusk_flat['temp'].loc[i].rolling(2).max()
 #this isnt iterating properly at all.. just giving all NaNs
 
 dfusk_flat['temp'].loc[3].expanding().mean()
 
+                                              #]]]]]]]]]
 
 ## takes only those with a LOS >= 2 days
 tee = pd.to_timedelta('2 days 00:00:00.00000')
 dfusk_ls = dfusk_flat[dfusk_flat["los"] >= tee]
 
+#a simplified dataframe of the key features to start with
+simft2 = sparseSorted[['hr','map_a', 'map_c', 'temp', 'rr', 'lact', 'wcc', 'ph', 'cr', 'pfr']]
 
-
-#Make 24hr batches? - this isnt the way
-daybatch=dfusk_ls.groupby(pd.Grouper(level='chartdelta', freq='24H'))
-
-
-#Now it's time to bring in Mortality - He Deaad
-izded=pd.read_pickle("/home/fintan/tensorflow/aretheydead.pkl")
-ded=pd.read_pickle("/home/fintan/tensorflow/dead.pkl")
-dfded = pd.concat(dfLact)
-
-izded
-mortyn = izded.sort_values(['encounterId'], ascending = [True])
-
-mortyn['dead'] = 0
-mortyn['dead'][(mortyn['dischargeDisposition'] == 'Deceased') | (mortyn['isDeceased'] == True)] = 1
-
-doornail=mortyn.set_index('encounterId').drop(['dischargeDisposition', 'isDeceased'], axis=1)
-
-#will come back to this join attempt..
-#mortyn.join(dfusk_flat.set_index('encountedId'))
+#Pads forwards missing values
+paddedSorted = simft2.copy()
+fillForward = ['hr','map_a', 'map_c', 'temp', 'rr', 'lact', 'wcc', 'ph', 'cr', 'pfr']
+eids = paddedSorted.index.droplevel(1)
+eids = eids[~eids.duplicated(keep='first')]
+for eid in eids:
+    for iid in fillForward:
+        paddedSorted.loc[eid][iid] = paddedSorted.loc[eid][iid].fillna(method='pad')
+        
+        
+#exporting out the .pkl
+simps=paddedSorted
+simps.to_pickle('/home/fintan/tensorflow/features/simps.pkl')
