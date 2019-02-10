@@ -10,7 +10,7 @@ data = dflessvent
 
 #Put into time bins
 #data_binnedlast=data.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelta', freq='8H'))]).agg({'valueNumber':['min', 'max']})
-data_binnedlast=data.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelta', freq='8H'))]).agg({'valueNumber':['last']})
+data_binnedlast=data.groupby(['encounterid','interventionID',(pd.Grouper(key='chartdelta', freq='12H'))]).agg({'valueNumber':['max']})
 
 #unstacking to give unique column for each feature
 dfusk = data_binnedlast.unstack('interventionID')
